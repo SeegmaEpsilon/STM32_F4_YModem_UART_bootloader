@@ -35,8 +35,8 @@ void cpu()
 	//Show Program Information
 	user_printf("\r\n\r\n");
 	user_printf("\r\n=========================");
-	user_printf("\r\n=     VD20 BOOTLOADER   =");
-	user_printf("\r\n=     VERSION: 1.0.0    =");
+	user_printf("\r\n=     UART BOOTLOADER   =");
+	user_printf("\r\n=     VERSION: 1.0.1    =");
 	user_printf("\r\n=========================");
 	user_printf("\r\n\r\n");
 
@@ -55,7 +55,7 @@ void cpu()
 	while(1)
 	{
 		//Show Main Menu
-		user_printf("\r\nPress '1' to download image to the STM32F1xx Internal Flash...");
+		user_printf("\r\nPress '1' to download image to the Internal Flash...");
 		//Receive a byte from usart1
 		cmd = Usart1_GetByte(timeout_us);
 		if (cmd == '1')
