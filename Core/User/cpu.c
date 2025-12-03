@@ -4,9 +4,8 @@
  *  Created on: Dec 22, 2023
  *      Author: agapitov
  */
-#include "includes.h"
+#include "cpu.h"
 
-extern UART_HandleTypeDef huart1;
 
 static void jump_to_app(void)
 {
@@ -25,55 +24,56 @@ static void jump_to_app(void)
 	jump_to_application();
 }
 
-void cpu()
+void cpu(dev_ctx_t *ctx)
 {
 	uint8_t cmd = 0;
 
-	const uint32_t timeout_us = 2000000;
+	const uint32_t timeout_ms = 2000;
 
-	user_printf_init(0x00, user_putc);
 	//Show Program Information
-	user_printf("\r\n\r\n");
-	user_printf("\r\n=========================");
-	user_printf("\r\n=     UART BOOTLOADER   =");
-	user_printf("\r\n=     VERSION: 1.0.1    =");
-	user_printf("\r\n=========================");
-	user_printf("\r\n\r\n");
+	ctx->printf("\r\n\r\n");
+	ctx->printf("=========================\r\n");
+	ctx->printf("=       BOOTLOADER      =\r\n");
+	ctx->printf("=     VERSION: 1.1.0    =\r\n");
+	ctx->printf("=========================\r\n");
+	ctx->printf("\r\n\r\n");
 
 	volatile uint32_t key = *(volatile uint32_t*)APPLICATION_ADDRESS;
+	uint8_t byte = 0;
 	if(key == 0xFFFFFFFF)
 	{
-		user_printf("\r\nDownload image via UART is NOT available");
-		user_printf("\r\nInstall factory firmware...\r\n");
-		if(Usart1_GetByte(timeout_us) != '*') while(1) {};
+		ctx->printf("Download image via UART is NOT available\r\n");
+		ctx->printf("Install factory firmware...\r\n");
+		ctx->data_get(ctx->handle, &byte, 1, timeout_ms);
+		if(byte != '*') while(1) {};
 	}
 	else
 	{
-		user_printf("\r\nDownload image via UART is available");
+		ctx->printf("Download image via UART is available\r\n");
 	}
 
 	while(1)
 	{
 		//Show Main Menu
-		user_printf("\r\nPress '1' to download image to the Internal Flash...");
+		ctx->printf("Press '1' to download image to the Internal Flash...\r\n");
 		//Receive a byte from usart1
-		cmd = Usart1_GetByte(timeout_us);
+		ctx->data_get(ctx->handle, &cmd, 1, timeout_ms);
 		if (cmd == '1')
 		{
-			download_to_flash();
-			user_printf("\r\nJump to main program after downloading...");
+			download_to_flash(ctx);
+			ctx->printf("Jump to main program after downloading...\r\n\r\n");
 			jump_to_app();
 		}
 		if (cmd == '#')
 		{
-			user_printf("\r\nStart flash erasing, please wait...");
-			if(flash_erase_application() == HAL_OK) user_printf("\r\nFlash erased successfully");
-			else user_printf("\r\nFlash erase failed");
+			ctx->printf("Start flash erasing, please wait...\r\n");
+			if(flash_erase_application() == HAL_OK) ctx->printf("Flash erased successfully\r\n");
+			else ctx->printf("Flash erase failed\r\n");
 			NVIC_SystemReset();
 		}
     else
     {
-      user_printf("\r\nJump to main program by timeout...\r\n");
+      ctx->printf("Jump to main program by timeout...\r\n\r\n");
       jump_to_app();
     }
 	}

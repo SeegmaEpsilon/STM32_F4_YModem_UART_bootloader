@@ -2,6 +2,10 @@
 #ifndef __YMODEM_H_
 #define __YMODEM_H_
 
+#include "interface/interface.h"
+#include "defines.h"
+#include "memory/flash.h"
+
 //Exported macro
 #define PACKET_SEQNO_INDEX      (1)
 #define PACKET_SEQNO_COMP_INDEX (2)
@@ -26,15 +30,10 @@
 #define ABORT1                  (0x41)  /* 'A' == 0x41, abort by user */
 #define ABORT2                  (0x61)  /* 'a' == 0x61, abort by user */
 
-#define NAK_TIMEOUT             (0x100000)
+#define NAK_TIMEOUT             (1000)
 #define MAX_ERRORS              (5)
 
-//User Define Area
-#ifndef IAP_Port
-	#define IAP_Port USART1
-#endif
-
 //Exported functions
-int32_t Ymodem_receive (uint8_t *,uint32_t appaddr);
+int32_t Ymodem_receive(dev_ctx_t *ctx, uint8_t *buf, uint32_t appaddr);
 
 #endif 

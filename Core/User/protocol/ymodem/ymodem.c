@@ -1,21 +1,33 @@
 /*
-//@brief :Data Rx and flash via Ymodem protocol
-//        (*)STM32F40x_41x IAP flash is excuted in Ymodem_Receive() function
-//        (*)Modified from STM AN395 example
-//@Author:RdMaxes
-//@Data  :2014/07/15
-//@Usage :
-//        (*)IAP_Port is defined in ymodem.h
-//        (*)This source file does not include IAP_Port initialize part
-//        (*)IAP_Port setting: USART2, 230400bps, 8, n, 1
-//@Note  :
+ //@brief :Data Rx and flash via Ymodem protocol
+ //        (*)STM32F40x_41x IAP flash is excuted in Ymodem_Receive() function
+ //        (*)Modified from STM AN395 example
+ //@Author:RdMaxes
+ //@Data  :2014/07/15
+ //@Usage :
+ //        (*)IAP_Port is defined in ymodem.h
+ //        (*)This source file does not include IAP_Port initialize part
+ //        (*)IAP_Port setting: USART2, 230400bps, 8, n, 1
+ //@Note  :
  */
 
 //Includes 
-#include "includes.h"
+#include "ymodem.h"
+#include "string.h"
+#include "stdlib.h"
 
 //extern variables
 extern uint8_t file_name[FILE_NAME_LENGTH];
+
+static int32_t Receive_Byte(dev_ctx_t *ctx, uint8_t *b, uint32_t to)
+{
+  return ctx->data_get(ctx->handle, b, 1, to);
+}
+
+static void Send_Byte(dev_ctx_t *ctx, uint8_t b)
+{
+  ctx->data_send(ctx->handle, &b, 1, 1000);
+}
 
 //Rx a packet from sender
 //data: pointer to store rx data
@@ -24,17 +36,17 @@ extern uint8_t file_name[FILE_NAME_LENGTH];
 //return:0=normally return
 //      -1=timeout or packet error
 //       1=abort by user 
-static int32_t Receive_Packet(uint8_t *data, int32_t *length, uint32_t timeout)
+static int32_t Receive_Packet(dev_ctx_t *ctx, uint8_t *data, int32_t *length, uint32_t timeout)
 {
   uint16_t i, packet_size;
   uint8_t c;
 
   *length = 0;
-  if (Receive_Byte(&c, timeout) != 0)
+  if(Receive_Byte(ctx, &c, timeout) != 0)
   {
     return -1;
   }
-  switch (c)
+  switch(c)
   {
     case SOH:
       packet_size = PACKET_SIZE;
@@ -45,7 +57,7 @@ static int32_t Receive_Packet(uint8_t *data, int32_t *length, uint32_t timeout)
     case EOT:
       return 0;
     case CA:
-      if ((Receive_Byte(&c, timeout) == 0) && (c == CA))
+      if((Receive_Byte(ctx, &c, timeout) == 0) && (c == CA))
       {
         *length = -1;
         return 0;
@@ -61,9 +73,9 @@ static int32_t Receive_Packet(uint8_t *data, int32_t *length, uint32_t timeout)
       return -1;
   }
   *data = c;
-  for (i = 1; i < (packet_size + PACKET_OVERHEAD); i ++)
+  for(i = 1; i < (packet_size + PACKET_OVERHEAD); i++)
   {
-    if (Receive_Byte(data + i, timeout) != 0)
+    if(Receive_Byte(ctx, data + i, timeout) != 0)
     {
       return -1;
     }
@@ -76,9 +88,9 @@ static int32_t Receive_Packet(uint8_t *data, int32_t *length, uint32_t timeout)
 //buf: pointer for data storage
 //appaddr: User Application address
 //return: size of IAP file
-int32_t Ymodem_receive (uint8_t *buf, uint32_t appaddr)
+int32_t Ymodem_receive(dev_ctx_t *ctx, uint8_t *buf, uint32_t appaddr)
 {
-  uint8_t packet_data[PACKET_1K_SIZE + PACKET_OVERHEAD], *file_ptr, *buf_ptr,flag_EOT;
+  uint8_t packet_data[PACKET_1K_SIZE + PACKET_OVERHEAD], *file_ptr, *buf_ptr, flag_EOT;
   int32_t i, packet_length, session_done, file_done, packets_received, errors, session_begin, size = 0;
   char file_size[FILE_SIZE_LENGTH];
   uint32_t flashdestination, ramsource;
@@ -86,54 +98,54 @@ int32_t Ymodem_receive (uint8_t *buf, uint32_t appaddr)
   //Initialize flashdestination variable
   flashdestination = appaddr;
   flag_EOT = 0;
-  for (session_done = 0, errors = 0, session_begin = 0; ;)
+  for(session_done = 0, errors = 0, session_begin = 0;;)
   {
-    for (packets_received = 0, file_done = 0, buf_ptr = buf; ;)
+    for(packets_received = 0, file_done = 0, buf_ptr = buf;;)
     {
-      switch (Receive_Packet(packet_data, &packet_length, NAK_TIMEOUT))
+      switch(Receive_Packet(ctx, packet_data, &packet_length, NAK_TIMEOUT))
       {
         case 0:
           errors = 0;
-          switch (packet_length)
+          switch(packet_length)
           {
             /* Abort by sender */
-            case - 1:
-              Send_Byte(ACK);
+            case -1:
+              Send_Byte(ctx, ACK);
               return 0;
               /* End of transmission */
             case 0:
-              if(flag_EOT==0) //first EOT
+              if(flag_EOT == 0) //first EOT
               {
-                Send_Byte(NACK);
+                Send_Byte(ctx, NACK);
                 flag_EOT = 1;
               }
-              else if (flag_EOT==1) //second EOT
+              else if(flag_EOT == 1) //second EOT
               {
-                Send_Byte(ACK);
-                Send_Byte('C');
+                Send_Byte(ctx, ACK);
+                Send_Byte(ctx, 'C');
                 file_done = 1;
               }
               break;
               /* Normal packet */
             default:
-              if ((packet_data[PACKET_SEQNO_INDEX] & 0xff) != (packets_received & 0xff))
+              if((packet_data[PACKET_SEQNO_INDEX] & 0xff) != (packets_received & 0xff))
               {
-                Send_Byte(NACK);//local data sequence number is different to rx data packet.
+                Send_Byte(ctx, NACK); //local data sequence number is different to rx data packet.
               }
               else
               {
-                if (packets_received == 0)
+                if(packets_received == 0)
                 {
                   /* Filename packet */
-                  if (packet_data[PACKET_HEADER] != 0)
+                  if(packet_data[PACKET_HEADER] != 0)
                   {
                     /* Filename packet has valid data */
-                    for (i = 0, file_ptr = packet_data + PACKET_HEADER; (*file_ptr != 0) && (i < FILE_NAME_LENGTH);)
+                    for(i = 0, file_ptr = packet_data + PACKET_HEADER; (*file_ptr != 0) && (i < FILE_NAME_LENGTH);)
                     {
                       file_name[i++] = *file_ptr++;
                     }
                     file_name[i++] = '\0';
-                    for (i = 0, file_ptr ++; (*file_ptr != ' ') && (i < FILE_SIZE_LENGTH);)
+                    for(i = 0, file_ptr++; (*file_ptr != ' ') && (i < FILE_SIZE_LENGTH);)
                     {
                       file_size[i++] = *file_ptr++;
                     }
@@ -142,25 +154,25 @@ int32_t Ymodem_receive (uint8_t *buf, uint32_t appaddr)
 
                     /* Test the size of the image to be sent */
                     /* Image size is greater than Flash size */
-                    if (size > (int32_t)(USER_FLASH_SIZE + 1))
+                    if(size > (int32_t)(USER_FLASH_SIZE + 1))
                     {
                       /* End session */
-                      Send_Byte(CA);
-                      Send_Byte(CA);
+                      Send_Byte(ctx, CA);
+                      Send_Byte(ctx, CA);
                       return -1;
                     }
                     /* erase user application area */
                     if(flash_erase_application() != HAL_OK)
                     {
-                      user_printf("\r\nError flash erasing, check core's power supply");
+                      ctx->printf("Error flash erasing, check core's power supply\r\n");
                     }
-                    Send_Byte(ACK);
-                    Send_Byte(CRC16);
+                    Send_Byte(ctx, ACK);
+                    Send_Byte(ctx, CRC16);
                   }
                   /* Filename packet is empty, end session */
                   else
                   {
-                    Send_Byte(ACK);
+                    Send_Byte(ctx, ACK);
                     file_done = 1;
                     session_done = 1;
                     break;
@@ -173,48 +185,48 @@ int32_t Ymodem_receive (uint8_t *buf, uint32_t appaddr)
                   ramsource = (uint32_t)buf_ptr;
 
                   /* Write received data in Flash */
-                  if (flash_write(&flashdestination, (uint32_t*)ramsource, (uint16_t) packet_length/4)  == 0)
+                  if(flash_write(&flashdestination, (uint32_t*)ramsource, (uint16_t)packet_length / 4) == 0)
                   {
                     flashdestination += packet_length;
-                    Send_Byte(ACK);
+                    Send_Byte(ctx, ACK);
                   }
                   else /* An error occurred while writing to Flash memory */
                   {
                     /* End session */
-                    Send_Byte(CA);
-                    Send_Byte(CA);
+                    Send_Byte(ctx, CA);
+                    Send_Byte(ctx, CA);
                     return -2;
                   }
                 }
-                packets_received ++;
+                packets_received++;
                 session_begin = 1;
               }
           }
           break;
-            case 1:
-              Send_Byte(CA);
-              Send_Byte(CA);
-              return -3;
-            default:
-              if (session_begin > 0)
-              {
-                errors ++;
-              }
-              if (errors > MAX_ERRORS)
-              {
-                Send_Byte(CA);
-                Send_Byte(CA);
-                return 0;
-              }
-              Send_Byte(CRC16);
-              break;
+        case 1:
+          Send_Byte(ctx, CA);
+          Send_Byte(ctx, CA);
+          return -3;
+        default:
+          if(session_begin > 0)
+          {
+            errors++;
+          }
+          if(errors > MAX_ERRORS)
+          {
+            Send_Byte(ctx, CA);
+            Send_Byte(ctx, CA);
+            return 0;
+          }
+          Send_Byte(ctx, CRC16);
+          break;
       }
-      if (file_done != 0)
+      if(file_done != 0)
       {
         break;
       }
     }
-    if (session_done != 0)
+    if(session_done != 0)
     {
       break;
     }

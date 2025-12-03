@@ -4,68 +4,41 @@
  *  Created on: 22 дек. 2023 г.
  *      Author: Cawa
  */
-#include "includes.h"
+#include "flash.h"
 
 //Global Variables
 uint8_t file_name[FILE_NAME_LENGTH]; //array to store filename of download *.bin
-uint8_t buf_1k[1024] ={0};
+uint8_t buf_1k[1024] = { 0 };
 
-//Convert an interger to a string
-//str: converted string
-//intnum: integer waiting for converting
-static void int_to_str(uint8_t* str, int32_t intnum)
+void download_to_flash(dev_ctx_t *ctx)
 {
-  uint32_t i, Div = 1000000000, j = 0, Status = 0;
-
-  for (i = 0; i < 10; i++)
-  {
-    str[j++] = (intnum / Div) + 48;
-
-    intnum = intnum % Div;
-    Div /= 10;
-    if ((str[j-1] == '0') & (Status == 0))
-    {
-      j = 0;
-    }
-    else
-    {
-      Status++;
-    }
-  }
-}
-
-void download_to_flash(void)
-{
-  uint8_t Number[10] = "          ";
   int32_t Size = 0;
 
-  user_printf("\n\r Waiting for the file to be sent ... (press 'a' to abort)\n\r");
-  Size = Ymodem_receive(&buf_1k[0],APPLICATION_ADDRESS);
-  if (Size > 0)
+  ctx->printf("  Waiting for the file to be sent ... (press 'a' to abort)\r\n");
+  Size = Ymodem_receive(ctx, &buf_1k[0], APPLICATION_ADDRESS);
+  if(Size > 0)
   {
-    user_printf("-------------------\n");
-    user_printf("\n\r Programming Completed Successfully!\n\r--------------------------------\r\n Name: ");
-    user_printf((char*)file_name);
-    int_to_str(Number, Size);
-    user_printf("\n\r Size: ");
-    user_printf((char*)Number);
-    user_printf(" Bytes\r\n");
+    ctx->printf("--------------------------------\r\n");
+    ctx->printf("Programming Completed Successfully!\r\n");
+    ctx->printf("--------------------------------\r\n");
+    ctx->printf("Name: %s\r\n", file_name);
+    ctx->printf("Size: %d Bytes\r\n", Size);
   }
-  else if (Size == -1)
+  else if(Size == -1)
   {
-    user_printf("\n\n\rThe image size is higher than the allowed space memory!\n\r");
+    ctx->printf("The image size is higher than the allowed space memory!\r\n");
   }
-  else if (Size == -2)
+  else if(Size == -2)
   {
-    user_printf("\n\n\rVerification failed!\n\r");
+    ctx->printf("Verification failed!\r\n");
   }
-  else if (Size == -3)
+  else if(Size == -3)
   {
-    user_printf("\r\n\nAborted by user.\n\r");
+    ctx->printf("Aborted by user.\r\n");
   }
   else
   {
-    user_printf("\n\rFailed to receive the file!\n\r");
+    ctx->printf("Failed to receive the file!\r\n");
   }
 }
 
@@ -101,7 +74,7 @@ HAL_StatusTypeDef flash_erase_application()
 //      0=Data successfully written to Flash memory
 //      1=Error occurred while writing data in Flash memory
 //      2=Written Data in flash memory is different from expected one
-uint32_t flash_write(__IO uint32_t* FlashAddress, uint32_t* Data ,uint32_t DataLength)
+uint32_t flash_write(__IO uint32_t *FlashAddress, uint32_t *Data, uint32_t DataLength)
 {
   uint32_t flash_addr = *FlashAddress;
 
@@ -109,9 +82,9 @@ uint32_t flash_write(__IO uint32_t* FlashAddress, uint32_t* Data ,uint32_t DataL
 
   HAL_FLASH_Unlock();
 
-  for (uint32_t i = 0; i < DataLength; i++)
+  for(uint32_t i = 0; i < DataLength; i++)
   {
-    if(HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, flash_addr,  *(Data+i)) != HAL_OK)
+    if(HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, flash_addr, *(Data + i)) != HAL_OK)
     {
       /* Error occurred while writing data in Flash memory */
       HAL_FLASH_Lock();
@@ -120,15 +93,15 @@ uint32_t flash_write(__IO uint32_t* FlashAddress, uint32_t* Data ,uint32_t DataL
     }
 
     /* Check the written value */
-    volatile uint32_t data_wr = *(Data+i);
+    volatile uint32_t data_wr = *(Data + i);
     volatile uint32_t data_rd = *((uint32_t*)flash_addr);
 
-    if (data_wr != data_rd)
+    if(data_wr != data_rd)
     {
       /* Flash content doesn't match SRAM content */
       HAL_FLASH_Lock();
       __enable_irq();
-      return(2);
+      return (2);
     }
     /* Increment FLASH destination address */
     flash_addr += sizeof(uint32_t);
@@ -138,7 +111,4 @@ uint32_t flash_write(__IO uint32_t* FlashAddress, uint32_t* Data ,uint32_t DataL
   __enable_irq();
   return (0);
 }
-
-
-
 

@@ -22,7 +22,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "includes.h"
+#include "cpu.h"
+#include "drivers/transport/uart_transport.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -89,7 +90,7 @@ int main(void)
   MX_GPIO_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-  cpu();
+  cpu(&uart_ctx);
   /* USER CODE END 2 */
 
   /* Infinite loop */

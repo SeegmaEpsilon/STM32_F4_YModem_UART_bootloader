@@ -8,6 +8,11 @@
 #ifndef USER_CPU_H_
 #define USER_CPU_H_
 
-void cpu();
+#include "interface/interface.h"
+#include "main.h"
+#include "memory/flash.h"
+#include "defines.h"
+
+void cpu(dev_ctx_t *ctx);
 
 #endif /* USER_CPU_H_ */
