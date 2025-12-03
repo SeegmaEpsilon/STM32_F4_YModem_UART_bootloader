@@ -1,4 +1,11 @@
+# User ingores
+/Docs/Doxygen/
+*.tmp
+
+# Compilation
 /Debug/
+/Release/
+/.settings/
 
 # Prerequisites
 *.d

@@ -20,5 +20,7 @@
 #include "ymodem.h"
 #include "defines.h"
 
+#include "cpu.h"
+
 
 #endif /* USER_INCLUDES_H_ */
