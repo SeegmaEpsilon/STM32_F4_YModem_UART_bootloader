@@ -1,6 +1,7 @@
 # User ingores
 /Docs/Doxygen/
 *.tmp
+key.h
 
 # Compilation
 /Debug/

@@ -15,6 +15,7 @@
 #include "ymodem.h"
 #include "string.h"
 #include "stdlib.h"
+#include "crypto/crypto.h"
 
 //extern variables
 extern uint8_t file_name[FILE_NAME_LENGTH];
@@ -181,7 +182,34 @@ int32_t Ymodem_receive(dev_ctx_t *ctx, uint8_t *buf, uint32_t appaddr)
                 /* Data packet */
                 else
                 {
+                  uint8_t encrypted_mode = 0;
+                  if(packets_received == 1) // first real data packet
+                  {
+                    uint32_t sp = *(uint32_t*)(packet_data + PACKET_HEADER);
+                    uint32_t rv = *(uint32_t*)(packet_data + PACKET_HEADER + 4);
+
+                    uint8_t sp_valid = (sp >= 0x20000000 && sp <= 0x20020000);
+                    uint8_t rv_valid = (rv >= 0x08000000 && rv <= 0x080FFFFF);
+
+                    if(sp_valid && rv_valid)
+                    {
+                      encrypted_mode = 0;   // common .bin
+                      ctx->printf("Non-encrypted firmware detected\r\n");
+                    }
+                    else
+                    {
+                      encrypted_mode = 1;   // AES firmware
+                      ctx->printf("Encrypted firmware detected\r\n");
+                    }
+                  }
+
                   memcpy(buf_ptr, packet_data + PACKET_HEADER, packet_length);
+
+                  if (encrypted_mode)
+                  {
+                      secure_decrypt_buffer(buf_ptr, packet_length);
+                  }
+
                   ramsource = (uint32_t)buf_ptr;
 
                   /* Write received data in Flash */
