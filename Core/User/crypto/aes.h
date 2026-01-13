@@ -12,11 +12,11 @@
 
 // The #ifndef-guard allows it to be configured before #include'ing or at compile time.
 #ifndef CBC
-  #define CBC 1
+  #define CBC 0
 #endif
 
 #ifndef ECB
-  #define ECB 1
+  #define ECB 0
 #endif
 
 #ifndef CTR
@@ -46,6 +46,11 @@ struct AES_ctx
   uint8_t RoundKey[AES_keyExpSize];
 #if (defined(CBC) && (CBC == 1)) || (defined(CTR) && (CTR == 1))
   uint8_t Iv[AES_BLOCKLEN];
+#endif
+
+#if (defined(CTR) && (CTR == 1))
+  uint8_t ctr_buf[AES_BLOCKLEN];  // last generated keystream-block
+  uint8_t ctr_pos;                // pos 0..15, 16 => need to generate new one
 #endif
 };
 

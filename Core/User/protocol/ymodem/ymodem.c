@@ -189,10 +189,10 @@ int32_t Ymodem_receive(dev_ctx_t *ctx, uint8_t *buf, uint32_t appaddr)
                 /* Data packet */
                 else
                 {
-                  const char *KEY = "SWAG";
-                  const uint8_t KEY_SIZE = 4;
+                  const char *TAG = "SWAG";
+                  const uint8_t TAG_SIZE = 4;
                   const uint8_t IV_SIZE = 16;
-                  const uint8_t CRYPTO_HEADER_SIZE = KEY_SIZE + IV_SIZE;
+                  const uint8_t CRYPTO_HEADER_SIZE = TAG_SIZE + IV_SIZE;
 
                   uint8_t *payload = packet_data + PACKET_HEADER;
 
@@ -202,11 +202,11 @@ int32_t Ymodem_receive(dev_ctx_t *ctx, uint8_t *buf, uint32_t appaddr)
 
                   if(packets_received == 1) // first real data packet
                   {
-                    if(n >= CRYPTO_HEADER_SIZE && memcmp(payload, KEY, KEY_SIZE) == 0)
+                    if(n >= CRYPTO_HEADER_SIZE && memcmp(payload, TAG, TAG_SIZE) == 0)
                     {
                       encrypted_mode = 1;
 
-                      secure_init(payload + KEY_SIZE);        // IV[16] - IV_SIZE
+                      secure_init(payload + TAG_SIZE);        // IV[16] - IV_SIZE
 
                       payload += CRYPTO_HEADER_SIZE;              // пропускаем FWEN+IV
                       n -= CRYPTO_HEADER_SIZE;

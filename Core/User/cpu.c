@@ -34,7 +34,7 @@ void cpu(dev_ctx_t *ctx)
 	ctx->printf("\r\n\r\n");
 	ctx->printf("=========================\r\n");
 	ctx->printf("=       BOOTLOADER      =\r\n");
-	ctx->printf("=     VERSION: 1.1.0    =\r\n");
+	ctx->printf("=     VERSION: 1.2.0    =\r\n");
 	ctx->printf("=========================\r\n");
 	ctx->printf("\r\n\r\n");
 
