@@ -11,8 +11,7 @@
 #include <stdint.h>
 #include "key.h"
 
-// template for aes key and iv
+// template for aes key
 extern const uint8_t aes_key[32];
-extern const uint8_t aes_iv[16];
 
 #endif /* USER_CRYPTO_KEY_TEMPLATE_H_ */

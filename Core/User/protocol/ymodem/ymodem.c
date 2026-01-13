@@ -96,6 +96,9 @@ int32_t Ymodem_receive(dev_ctx_t *ctx, uint8_t *buf, uint32_t appaddr)
   char file_size[FILE_SIZE_LENGTH];
   uint32_t flashdestination, ramsource;
 
+  uint8_t encrypted_mode = 0;
+  uint32_t bytes_left = 0;
+
   //Initialize flashdestination variable
   flashdestination = appaddr;
   flag_EOT = 0;
@@ -151,7 +154,11 @@ int32_t Ymodem_receive(dev_ctx_t *ctx, uint8_t *buf, uint32_t appaddr)
                       file_size[i++] = *file_ptr++;
                     }
                     file_size[i++] = '\0';
+
                     size = atoi(file_size);
+
+                    bytes_left = (uint32_t)size;
+                    encrypted_mode = 0;
 
                     /* Test the size of the image to be sent */
                     /* Image size is greater than Flash size */
@@ -182,40 +189,47 @@ int32_t Ymodem_receive(dev_ctx_t *ctx, uint8_t *buf, uint32_t appaddr)
                 /* Data packet */
                 else
                 {
-                  uint8_t encrypted_mode = 0;
+                  const char *KEY = "SWAG";
+                  const uint8_t KEY_SIZE = 4;
+                  const uint8_t IV_SIZE = 16;
+                  const uint8_t CRYPTO_HEADER_SIZE = KEY_SIZE + IV_SIZE;
+
+                  uint8_t *payload = packet_data + PACKET_HEADER;
+
+                  uint32_t n = (bytes_left < (uint32_t)packet_length) ? bytes_left : (uint32_t)packet_length;
+                  if (n == 0) { Send_Byte(ctx, ACK); continue; }
+                  bytes_left -= n;
+
                   if(packets_received == 1) // first real data packet
                   {
-                    uint32_t sp = *(uint32_t*)(packet_data + PACKET_HEADER);
-                    uint32_t rv = *(uint32_t*)(packet_data + PACKET_HEADER + 4);
-
-                    uint8_t sp_valid = (sp >= 0x20000000 && sp <= 0x20020000);
-                    uint8_t rv_valid = (rv >= 0x08000000 && rv <= 0x080FFFFF);
-
-                    if(sp_valid && rv_valid)
+                    if(n >= CRYPTO_HEADER_SIZE && memcmp(payload, KEY, KEY_SIZE) == 0)
                     {
-                      encrypted_mode = 0;   // common .bin
-                      ctx->printf("Non-encrypted firmware detected\r\n");
+                      encrypted_mode = 1;
+
+                      secure_init(payload + KEY_SIZE);        // IV[16] - IV_SIZE
+
+                      payload += CRYPTO_HEADER_SIZE;              // пропускаем FWEN+IV
+                      n -= CRYPTO_HEADER_SIZE;
                     }
                     else
                     {
-                      encrypted_mode = 1;   // AES firmware
-                      ctx->printf("Encrypted firmware detected\r\n");
+                      encrypted_mode = 0;
                     }
                   }
 
-                  memcpy(buf_ptr, packet_data + PACKET_HEADER, packet_length);
+                  memcpy(buf_ptr, payload, n);
 
-                  if (encrypted_mode)
+                  if(encrypted_mode)
                   {
-                      secure_decrypt_buffer(buf_ptr, packet_length);
+                    secure_decrypt_buffer(buf_ptr, n);
                   }
 
                   ramsource = (uint32_t)buf_ptr;
 
                   /* Write received data in Flash */
-                  if(flash_write(&flashdestination, (uint32_t*)ramsource, (uint16_t)packet_length / 4) == 0)
+                  if(flash_write(&flashdestination, (uint32_t*)ramsource, (uint16_t)n / 4) == 0)
                   {
-                    flashdestination += packet_length;
+                    flashdestination += n;
                     Send_Byte(ctx, ACK);
                   }
                   else /* An error occurred while writing to Flash memory */

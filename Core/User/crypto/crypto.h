@@ -10,6 +10,7 @@
 
 #include "stdint.h"
 
+void secure_init(const uint8_t iv[16]);
 void secure_decrypt_buffer(uint8_t *buf, uint32_t len);
 
 #endif /* USER_CRYPTO_CRYPTO_H_ */
