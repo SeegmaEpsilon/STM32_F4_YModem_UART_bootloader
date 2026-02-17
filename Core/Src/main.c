@@ -25,6 +25,7 @@
 /* USER CODE BEGIN Includes */
 #include "cpu.h"
 #include "drivers/transport/uart_transport.h"
+#include "drivers/transport/usb_cdc_transport.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -92,7 +93,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
-  cpu(&uart_ctx);
+  cpu(&usb_cdc_ctx);
   /* USER CODE END 2 */
 
   /* Infinite loop */

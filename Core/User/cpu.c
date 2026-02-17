@@ -18,6 +18,8 @@ static void jump_to_app(void)
 	jump_address = *(uint32_t*)(APPLICATION_ADDRESS + sizeof(uint32_t));
 	jump_to_application = (pFunction) jump_address;
 
+  usb_cdc_kill();
+
 	SCB->VTOR = APPLICATION_ADDRESS;
 	__enable_irq();
 	__set_MSP(*(uint32_t*)APPLICATION_ADDRESS);
