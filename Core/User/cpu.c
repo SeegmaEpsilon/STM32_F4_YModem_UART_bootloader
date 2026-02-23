@@ -5,25 +5,50 @@
  *      Author: agapitov
  */
 #include "cpu.h"
+#include "drivers/transport/usb_cdc_transport.h"
+#include "usbd_core.h"
 
+void HAL_DeInit_All()
+{
+  // Отключить используемые периферийные устройства
+  HAL_UART_MspDeInit(&huart1);
+  USBD_DeInit(&hUsbDeviceHS);
+
+  // Отключить тактирование GPIO
+  __HAL_RCC_GPIOH_CLK_DISABLE();
+  __HAL_RCC_GPIOC_CLK_DISABLE();
+  __HAL_RCC_GPIOB_CLK_DISABLE();
+  __HAL_RCC_GPIOA_CLK_DISABLE();
+
+  // Отключить все тактовые генераторы периферийных устройств
+  HAL_RCC_DeInit();
+  // Деинитизация HAL
+  HAL_DeInit();
+
+  // Отключить SysTick
+  SysTick->CTRL = 0;
+  SysTick->LOAD = 0;
+  SysTick->VAL = 0;
+}
 
 static void jump_to_app(void)
 {
-	typedef  void (*pFunction)(void);
-	pFunction jump_to_application;
-	uint32_t  jump_address;
+  HAL_DeInit_All();
+  // Function pointer to the application's reset handler
+  void (*app_reset_handler)(void);
 
-	__disable_irq();
+  // Retrieve the stack pointer and reset handler from application's vector table
+  uint32_t app_stack_pointer = *((volatile uint32_t *)APPLICATION_ADDRESS);
+  uint32_t app_reset_handler_address = *((volatile uint32_t *)(APPLICATION_ADDRESS + 4U));
 
-	jump_address = *(uint32_t*)(APPLICATION_ADDRESS + sizeof(uint32_t));
-	jump_to_application = (pFunction) jump_address;
+  // Set the MSP (Main Stack Pointer) to the application's stack pointer
+  __set_MSP(app_stack_pointer);
 
-  usb_cdc_kill();
+  // Assign the reset handler address to the function pointer
+  app_reset_handler = (void (*)(void))app_reset_handler_address;
 
-	SCB->VTOR = APPLICATION_ADDRESS;
-	__enable_irq();
-	__set_MSP(*(uint32_t*)APPLICATION_ADDRESS);
-	jump_to_application();
+  // Call the application's reset handler
+  app_reset_handler();
 }
 
 void cpu(dev_ctx_t *ctx)
@@ -31,6 +56,7 @@ void cpu(dev_ctx_t *ctx)
 	uint8_t cmd = 0;
 
 	const uint32_t timeout_ms = 2000;
+	while(hUsbDeviceHS.dev_state == USBD_STATE_CONFIGURED);
 
 	//Show Program Information
 	ctx->printf("\r\n\r\n");
