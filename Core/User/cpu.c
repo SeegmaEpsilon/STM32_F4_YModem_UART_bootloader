@@ -5,27 +5,34 @@
  *      Author: agapitov
  */
 #include "cpu.h"
+#ifdef USE_INTERFACE_USB
 #include "drivers/transport/usb_cdc_transport.h"
-#include "usbd_core.h"
+#endif
 
-void HAL_DeInit_All()
+#ifdef USE_INTERFACE_USB
+#define BOOTLOADER_INTERFACE_NAME "USB CDC"
+#else
+#define BOOTLOADER_INTERFACE_NAME "UART"
+#endif
+
+static void hal_deinit_all(void)
 {
-  // Отключить используемые периферийные устройства
-  HAL_UART_MspDeInit(&huart1);
-  USBD_DeInit(&hUsbDeviceHS);
+  HAL_UART_DeInit(&huart1);
 
-  // Отключить тактирование GPIO
+#ifdef USE_INTERFACE_USB
+  usb_cdc_kill();
+#endif
+
+#ifdef USE_INTERFACE_USB
   __HAL_RCC_GPIOH_CLK_DISABLE();
   __HAL_RCC_GPIOC_CLK_DISABLE();
   __HAL_RCC_GPIOB_CLK_DISABLE();
+#endif
   __HAL_RCC_GPIOA_CLK_DISABLE();
 
-  // Отключить все тактовые генераторы периферийных устройств
   HAL_RCC_DeInit();
-  // Деинитизация HAL
   HAL_DeInit();
 
-  // Отключить SysTick
   SysTick->CTRL = 0;
   SysTick->LOAD = 0;
   SysTick->VAL = 0;
@@ -33,76 +40,74 @@ void HAL_DeInit_All()
 
 static void jump_to_app(void)
 {
-  HAL_DeInit_All();
-  // Function pointer to the application's reset handler
-  void (*app_reset_handler)(void);
+  typedef void (*pFunction)(void);
+  uint32_t jump_address = *(uint32_t*)(APPLICATION_ADDRESS + sizeof(uint32_t));
+  pFunction jump_to_application = (pFunction)jump_address;
 
-  // Retrieve the stack pointer and reset handler from application's vector table
-  uint32_t app_stack_pointer = *((volatile uint32_t *)APPLICATION_ADDRESS);
-  uint32_t app_reset_handler_address = *((volatile uint32_t *)(APPLICATION_ADDRESS + 4U));
+  __disable_irq();
 
-  // Set the MSP (Main Stack Pointer) to the application's stack pointer
-  __set_MSP(app_stack_pointer);
+  hal_deinit_all();
 
-  // Assign the reset handler address to the function pointer
-  app_reset_handler = (void (*)(void))app_reset_handler_address;
+  SCB->VTOR = APPLICATION_ADDRESS;
+  __set_MSP(*(uint32_t*)APPLICATION_ADDRESS);
+  __enable_irq();
 
-  // Call the application's reset handler
-  app_reset_handler();
+  jump_to_application();
 }
 
 void cpu(dev_ctx_t *ctx)
 {
-	uint8_t cmd = 0;
+  uint8_t cmd = 0;
 
-	const uint32_t timeout_ms = 2000;
-	while(hUsbDeviceHS.dev_state == USBD_STATE_CONFIGURED);
+  const uint32_t timeout_ms = 2000;
+#ifdef USE_INTERFACE_USB
+  while(hUsbDeviceHS.dev_state == USBD_STATE_CONFIGURED) {};
+#endif
 
-	//Show Program Information
-	ctx->printf("\r\n\r\n");
-	ctx->printf("=========================\r\n");
-	ctx->printf("=       BOOTLOADER      =\r\n");
-	ctx->printf("=     VERSION: 1.2.0    =\r\n");
-	ctx->printf("=========================\r\n");
-	ctx->printf("\r\n\r\n");
+  // Show Program Information
+  ctx->printf("\r\n\r\n");
+  ctx->printf("=========================\r\n");
+  ctx->printf("=       BOOTLOADER      =\r\n");
+  ctx->printf("=     VERSION: 1.2.0    =\r\n");
+  ctx->printf("=========================\r\n");
+  ctx->printf("\r\n\r\n");
 
-	volatile uint32_t key = *(volatile uint32_t*)APPLICATION_ADDRESS;
-	uint8_t byte = 0;
-	if(key == 0xFFFFFFFF)
-	{
-		ctx->printf("Download image via UART is NOT available\r\n");
-		ctx->printf("Install factory firmware...\r\n");
-		ctx->data_get(ctx->handle, &byte, 1, timeout_ms);
-		if(byte != '*') while(1) {};
-	}
-	else
-	{
-		ctx->printf("Download image via UART is available\r\n");
-	}
+  volatile uint32_t key = *(volatile uint32_t*)APPLICATION_ADDRESS;
+  uint8_t byte = 0;
+  if(key == 0xFFFFFFFF)
+  {
+    ctx->printf("Download image via %s is NOT available\r\n", BOOTLOADER_INTERFACE_NAME);
+    ctx->printf("Install factory firmware...\r\n");
+    ctx->data_get(ctx->handle, &byte, 1, timeout_ms);
+    if(byte != '*') while(1) {};
+  }
+  else
+  {
+    ctx->printf("Download image via %s is available\r\n", BOOTLOADER_INTERFACE_NAME);
+  }
 
-	while(1)
-	{
-		//Show Main Menu
-		ctx->printf("Press '1' to download image to the Internal Flash...\r\n");
-		//Receive a byte from usart1
-		ctx->data_get(ctx->handle, &cmd, 1, timeout_ms);
-		if (cmd == '1')
-		{
-			download_to_flash(ctx);
-			ctx->printf("Jump to main program after downloading...\r\n\r\n");
-			jump_to_app();
-		}
-		if (cmd == '#')
-		{
-			ctx->printf("Start flash erasing, please wait...\r\n");
-			if(flash_erase_application() == HAL_OK) ctx->printf("Flash erased successfully\r\n");
-			else ctx->printf("Flash erase failed\r\n");
-			NVIC_SystemReset();
-		}
+  while(1)
+  {
+    // Show Main Menu
+    ctx->printf("Press '1' to download image to the Internal Flash...\r\n");
+    ctx->data_get(ctx->handle, &cmd, 1, timeout_ms);
+    if (cmd == '1')
+    {
+      download_to_flash(ctx);
+      ctx->printf("Jump to main program after downloading...\r\n\r\n");
+      jump_to_app();
+    }
+    if (cmd == '#')
+    {
+      ctx->printf("Start flash erasing, please wait...\r\n");
+      if(flash_erase_application() == HAL_OK) ctx->printf("Flash erased successfully\r\n");
+      else ctx->printf("Flash erase failed\r\n");
+      NVIC_SystemReset();
+    }
     else
     {
       ctx->printf("Jump to main program by timeout...\r\n\r\n");
       jump_to_app();
     }
-	}
+  }
 }

@@ -52,7 +52,7 @@ void usb_cdc_rx_push(const uint8_t *buf, uint32_t len)
   }
 }
 
-void usb_cdc_kill()
+void usb_cdc_kill(void)
 {
   USBD_Stop(&hUsbDeviceHS);
   USBD_DeInit(&hUsbDeviceHS);

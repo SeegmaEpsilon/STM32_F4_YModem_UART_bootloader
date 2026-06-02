@@ -56,7 +56,9 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
+#ifdef USE_INTERFACE_USB
 extern PCD_HandleTypeDef hpcd_USB_OTG_HS;
+#endif
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -202,6 +204,7 @@ void SysTick_Handler(void)
 /**
   * @brief This function handles USB On The Go HS global interrupt.
   */
+#ifdef USE_INTERFACE_USB
 void OTG_HS_IRQHandler(void)
 {
   /* USER CODE BEGIN OTG_HS_IRQn 0 */
@@ -212,6 +215,7 @@ void OTG_HS_IRQHandler(void)
 
   /* USER CODE END OTG_HS_IRQn 1 */
 }
+#endif
 
 /* USER CODE BEGIN 1 */
 

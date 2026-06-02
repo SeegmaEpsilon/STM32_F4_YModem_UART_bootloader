@@ -16,7 +16,7 @@
 extern "C" {
 #endif
 
-void usb_cdc_kill();
+void usb_cdc_kill(void);
 
 // Вызывается из CDC_Receive_FS/HS() (usbd_cdc_if.c)
 void usb_cdc_rx_push(const uint8_t *buf, uint32_t len);
