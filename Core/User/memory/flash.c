@@ -10,6 +10,22 @@
 uint8_t file_name[FILE_NAME_LENGTH]; //array to store filename of download *.bin
 uint8_t buf_1k[1024] = { 0 };
 
+static uint32_t flash_get_sector(uint32_t address)
+{
+  if(address < 0x08004000UL) return FLASH_SECTOR_0;
+  if(address < 0x08008000UL) return FLASH_SECTOR_1;
+  if(address < 0x0800C000UL) return FLASH_SECTOR_2;
+  if(address < 0x08010000UL) return FLASH_SECTOR_3;
+  if(address < 0x08020000UL) return FLASH_SECTOR_4;
+  if(address < 0x08040000UL) return FLASH_SECTOR_5;
+  if(address < 0x08060000UL) return FLASH_SECTOR_6;
+  if(address < 0x08080000UL) return FLASH_SECTOR_7;
+  if(address < 0x080A0000UL) return FLASH_SECTOR_8;
+  if(address < 0x080C0000UL) return FLASH_SECTOR_9;
+  if(address < 0x080E0000UL) return FLASH_SECTOR_10;
+  return FLASH_SECTOR_11;
+}
+
 void download_to_flash(dev_ctx_t *ctx)
 {
   int32_t Size = 0;
@@ -42,8 +58,16 @@ void download_to_flash(dev_ctx_t *ctx)
   }
 }
 
-HAL_StatusTypeDef flash_erase_application()
+HAL_StatusTypeDef flash_erase_application(uint32_t size)
 {
+  if(size == 0 || size > USER_FLASH_SIZE)
+  {
+    return HAL_ERROR;
+  }
+
+  uint32_t startSector = flash_get_sector(APPLICATION_ADDRESS);
+  uint32_t endSector = flash_get_sector(APPLICATION_ADDRESS + size - 1);
+
   __disable_irq();
   HAL_FLASH_Unlock();
 
@@ -54,8 +78,8 @@ HAL_StatusTypeDef flash_erase_application()
 
   EraseInitStruct.TypeErase = FLASH_TYPEERASE_SECTORS;
   EraseInitStruct.Banks = FLASH_BANK_1;
-  EraseInitStruct.NbSectors = 2;
-  EraseInitStruct.Sector = 4;
+  EraseInitStruct.NbSectors = endSector - startSector + 1;
+  EraseInitStruct.Sector = startSector;
 
   status = HAL_FLASHEx_Erase(&EraseInitStruct, &pageError);
 
@@ -111,4 +135,3 @@ uint32_t flash_write(__IO uint32_t *FlashAddress, uint32_t *Data, uint32_t DataL
   __enable_irq();
   return (0);
 }
-

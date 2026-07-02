@@ -10,9 +10,9 @@
 
 #define APPLICATION_ADDRESS 0x08010000UL
 /* Define USE_INTERFACE_USB in compiler settings to use USB CDC instead of UART/RS485. */
-//End of the Flash address
+//End of the Flash address (exclusive)
 #define USER_FLASH_END_ADDRESS 0x08040000UL
 //Define the user application size
-#define USER_FLASH_SIZE   (USER_FLASH_END_ADDRESS - APPLICATION_ADDRESS + 1)
+#define USER_FLASH_SIZE   (USER_FLASH_END_ADDRESS - APPLICATION_ADDRESS)
 
 #endif /* USER_DEFINES_H_ */

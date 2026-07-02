@@ -68,7 +68,7 @@ void cpu(dev_ctx_t *ctx)
   ctx->printf("\r\n\r\n");
   ctx->printf("=========================\r\n");
   ctx->printf("=       BOOTLOADER      =\r\n");
-  ctx->printf("=     VERSION: 1.2.0    =\r\n");
+  ctx->printf("=     VERSION: 1.2.1    =\r\n");
   ctx->printf("=========================\r\n");
   ctx->printf("\r\n\r\n");
 
@@ -100,7 +100,7 @@ void cpu(dev_ctx_t *ctx)
     if (cmd == '#')
     {
       ctx->printf("Start flash erasing, please wait...\r\n");
-      if(flash_erase_application() == HAL_OK) ctx->printf("Flash erased successfully\r\n");
+      if(flash_erase_application(USER_FLASH_SIZE) == HAL_OK) ctx->printf("Flash erased successfully\r\n");
       else ctx->printf("Flash erase failed\r\n");
       NVIC_SystemReset();
     }
