@@ -15,6 +15,11 @@
 #define BOOTLOADER_INTERFACE_NAME "UART"
 #endif
 
+#define BOOTLOADER_VERSION "1.3.0-beta.1"
+#define APP_RAM_START      0x20000000UL
+#define APP_RAM_END        0x20020000UL
+#define BOOTLOADER_BOX     "============================="
+
 static void hal_deinit_all(void)
 {
   HAL_UART_DeInit(&huart1);
@@ -38,11 +43,64 @@ static void hal_deinit_all(void)
   SysTick->VAL = 0;
 }
 
+static uint8_t app_is_valid(void)
+{
+  uint32_t stack = *(uint32_t*)APPLICATION_ADDRESS;
+  uint32_t reset = *(uint32_t*)(APPLICATION_ADDRESS + sizeof(uint32_t));
+  uint32_t reset_addr = reset & ~1UL;
+
+  if(stack < APP_RAM_START || stack > APP_RAM_END) return 0;
+  if((reset & 1UL) == 0) return 0;
+  if(reset_addr < APPLICATION_ADDRESS || reset_addr >= USER_FLASH_END_ADDRESS) return 0;
+
+  return 1;
+}
+
+static void print_app_status(dev_ctx_t *ctx)
+{
+  if(app_is_valid()) ctx->printf("Application is valid\r\n");
+  else ctx->printf("Application is invalid\r\n");
+}
+
+static void print_info(dev_ctx_t *ctx)
+{
+  uint32_t *uid = (uint32_t*)UID_BASE;
+
+  ctx->printf("Bootloader: %s\r\n", BOOTLOADER_VERSION);
+  ctx->printf("Interface: %s\r\n", BOOTLOADER_INTERFACE_NAME);
+  ctx->printf("App: 0x%08lX-0x%08lX\r\n", APPLICATION_ADDRESS, USER_FLASH_END_ADDRESS);
+  ctx->printf("App size: %lu bytes\r\n", USER_FLASH_SIZE);
+  ctx->printf("App MSP: 0x%08lX\r\n", *(uint32_t*)APPLICATION_ADDRESS);
+  ctx->printf("App reset: 0x%08lX\r\n", *(uint32_t*)(APPLICATION_ADDRESS + sizeof(uint32_t)));
+  ctx->printf("Reset flags: 0x%08lX\r\n", RCC->CSR);
+  ctx->printf("MCU flash: %u KB\r\n", *(uint16_t*)FLASHSIZE_BASE);
+  ctx->printf("UID: %08lX%08lX%08lX\r\n", uid[0], uid[1], uid[2]);
+  print_app_status(ctx);
+}
+
+static void print_menu(dev_ctx_t *ctx)
+{
+  ctx->printf("Press '1' to download image to the Internal Flash...\r\n");
+  ctx->printf("Commands: v-verify, g-go, e-erase, i-info, r-reset\r\n");
+}
+
+static void drop_rx_line(dev_ctx_t *ctx)
+{
+  uint8_t b = 0;
+
+  while(ctx->data_get(ctx->handle, &b, 1, 5) == 0)
+  {
+    if(b == '\r' || b == '\n') break;
+  }
+}
+
 static void jump_to_app(void)
 {
   typedef void (*pFunction)(void);
   uint32_t jump_address = *(uint32_t*)(APPLICATION_ADDRESS + sizeof(uint32_t));
   pFunction jump_to_application = (pFunction)jump_address;
+
+  if(!app_is_valid()) return;
 
   __disable_irq();
 
@@ -66,48 +124,107 @@ void cpu(dev_ctx_t *ctx)
 
   // Show Program Information
   ctx->printf("\r\n\r\n");
-  ctx->printf("=========================\r\n");
-  ctx->printf("=       BOOTLOADER      =\r\n");
-  ctx->printf("=     VERSION: 1.2.1    =\r\n");
-  ctx->printf("=========================\r\n");
+  ctx->printf(BOOTLOADER_BOX "\r\n");
+  ctx->printf("= %-25s =\r\n", "BOOTLOADER");
+  ctx->printf("= %-25s =\r\n", "VERSION: " BOOTLOADER_VERSION);
+  ctx->printf(BOOTLOADER_BOX "\r\n");
   ctx->printf("\r\n\r\n");
 
-  volatile uint32_t key = *(volatile uint32_t*)APPLICATION_ADDRESS;
-  uint8_t byte = 0;
-  if(key == 0xFFFFFFFF)
+  if(!app_is_valid())
   {
-    ctx->printf("Download image via %s is NOT available\r\n", BOOTLOADER_INTERFACE_NAME);
-    ctx->printf("Install factory firmware...\r\n");
-    ctx->data_get(ctx->handle, &byte, 1, timeout_ms);
-    if(byte != '*') while(1) {};
+    ctx->printf("Application is invalid\r\n");
+    ctx->printf("Install firmware via %s\r\n", BOOTLOADER_INTERFACE_NAME);
   }
   else
   {
-    ctx->printf("Download image via %s is available\r\n", BOOTLOADER_INTERFACE_NAME);
+    ctx->printf("Application is valid\r\n");
   }
+
+  print_menu(ctx);
 
   while(1)
   {
-    // Show Main Menu
-    ctx->printf("Press '1' to download image to the Internal Flash...\r\n");
-    ctx->data_get(ctx->handle, &cmd, 1, timeout_ms);
-    if (cmd == '1')
+    cmd = 0;
+
+    ctx->printf(".");
+
+    if(ctx->data_get(ctx->handle, &cmd, 1, timeout_ms) != 0)
     {
-      download_to_flash(ctx);
-      ctx->printf("Jump to main program after downloading...\r\n\r\n");
-      jump_to_app();
+      if(app_is_valid())
+      {
+        ctx->printf("Jump to main program by timeout...\r\n\r\n");
+        jump_to_app();
+      }
+      continue;
     }
-    if (cmd == '#')
+
+    if(cmd == '\r' || cmd == '\n' || cmd == ' ') continue;
+    if(cmd == ':')
     {
-      ctx->printf("Start flash erasing, please wait...\r\n");
-      if(flash_erase_application(USER_FLASH_SIZE) == HAL_OK) ctx->printf("Flash erased successfully\r\n");
-      else ctx->printf("Flash erase failed\r\n");
-      NVIC_SystemReset();
+      drop_rx_line(ctx);
+      print_menu(ctx);
+      continue;
     }
-    else
+
+    switch(cmd)
     {
-      ctx->printf("Jump to main program by timeout...\r\n\r\n");
-      jump_to_app();
+      case '1':
+        if(download_to_flash(ctx) > 0 && app_is_valid())
+        {
+          ctx->printf("Jump to main program after downloading...\r\n\r\n");
+          jump_to_app();
+        }
+        else
+        {
+          ctx->printf("Application is invalid\r\n");
+        }
+        break;
+
+      case 'v':
+        print_app_status(ctx);
+        break;
+
+      case 'g':
+        if(app_is_valid())
+        {
+          ctx->printf("Jump to main program...\r\n\r\n");
+          jump_to_app();
+        }
+        else
+        {
+          ctx->printf("Application is invalid\r\n");
+        }
+        break;
+
+      case 'e':
+        ctx->printf("Erase application? y/n\r\n");
+        cmd = 0;
+        if(ctx->data_get(ctx->handle, &cmd, 1, timeout_ms) == 0 && cmd == 'y')
+        {
+          ctx->printf("Start flash erasing, please wait...\r\n");
+          if(flash_erase_application(USER_FLASH_SIZE) == HAL_OK) ctx->printf("Flash erased successfully\r\n");
+          else ctx->printf("Flash erase failed\r\n");
+          NVIC_SystemReset();
+        }
+        else
+        {
+          ctx->printf("Erase canceled\r\n");
+        }
+        break;
+
+      case 'i':
+        print_info(ctx);
+        break;
+
+      case 'r':
+        ctx->printf("System reset...\r\n");
+        NVIC_SystemReset();
+        break;
+
+      default:
+        continue;
     }
+
+    print_menu(ctx);
   }
 }

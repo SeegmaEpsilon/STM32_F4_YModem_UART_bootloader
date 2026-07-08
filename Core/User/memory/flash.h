@@ -13,7 +13,7 @@
 #include "protocol/ymodem/ymodem.h"
 #include "defines.h"
 
-void download_to_flash(dev_ctx_t *ctx);
+int32_t download_to_flash(dev_ctx_t *ctx);
 HAL_StatusTypeDef flash_erase_application(uint32_t size);
 uint32_t flash_write(__IO uint32_t* FlashAddress, uint32_t* Data ,uint32_t DataLength);
 

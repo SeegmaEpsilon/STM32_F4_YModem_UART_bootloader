@@ -26,7 +26,7 @@ static uint32_t flash_get_sector(uint32_t address)
   return FLASH_SECTOR_11;
 }
 
-void download_to_flash(dev_ctx_t *ctx)
+int32_t download_to_flash(dev_ctx_t *ctx)
 {
   int32_t Size = 0;
 
@@ -56,6 +56,8 @@ void download_to_flash(dev_ctx_t *ctx)
   {
     ctx->printf("Failed to receive the file!\r\n");
   }
+
+  return Size;
 }
 
 HAL_StatusTypeDef flash_erase_application(uint32_t size)
