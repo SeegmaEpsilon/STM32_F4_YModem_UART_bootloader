@@ -30,12 +30,29 @@ static void Send_Byte(dev_ctx_t *ctx, uint8_t b)
   ctx->data_send(ctx->handle, &b, 1, 1000);
 }
 
+static uint16_t crc16(const uint8_t *data, uint16_t length)
+{
+  uint16_t crc = 0;
+
+  while(length--)
+  {
+    crc ^= (uint16_t)*data++ << 8;
+    for(uint8_t i = 0; i < 8; i++)
+    {
+      crc = (crc & 0x8000U) ? (uint16_t)((crc << 1) ^ 0x1021U) : (uint16_t)(crc << 1);
+    }
+  }
+
+  return crc;
+}
+
 //Rx a packet from sender
 //data: pointer to store rx data
 //length: packet length
 //timeout: rx time out
 //return:0=normally return
-//      -1=timeout or packet error
+//      -1=timeout or control byte error
+//      -2=sequence complement or CRC error
 //       1=abort by user 
 static int32_t Receive_Packet(dev_ctx_t *ctx, uint8_t *data, int32_t *length, uint32_t timeout)
 {
@@ -81,6 +98,16 @@ static int32_t Receive_Packet(dev_ctx_t *ctx, uint8_t *data, int32_t *length, ui
       return -1;
     }
   }
+  if((uint8_t)(data[PACKET_SEQNO_INDEX] + data[PACKET_SEQNO_COMP_INDEX]) != 0xFFU)
+  {
+    return -2;
+  }
+  uint16_t received_crc = (uint16_t)data[PACKET_HEADER + packet_size] << 8;
+  received_crc |= data[PACKET_HEADER + packet_size + 1];
+  if(crc16(data + PACKET_HEADER, packet_size) != received_crc)
+  {
+    return -2;
+  }
   *length = packet_size;
   return 0;
 }
@@ -125,6 +152,12 @@ int32_t Ymodem_receive(dev_ctx_t *ctx, uint8_t *buf, uint32_t appaddr)
               }
               else if(flag_EOT == 1) //second EOT
               {
+                if(bytes_left != 0)
+                {
+                  Send_Byte(ctx, CA);
+                  Send_Byte(ctx, CA);
+                  return 0;
+                }
                 Send_Byte(ctx, ACK);
                 Send_Byte(ctx, 'C');
                 file_done = 1;
@@ -132,7 +165,13 @@ int32_t Ymodem_receive(dev_ctx_t *ctx, uint8_t *buf, uint32_t appaddr)
               break;
               /* Normal packet */
             default:
-              if((packet_data[PACKET_SEQNO_INDEX] & 0xff) != (packets_received & 0xff))
+              if(packets_received > 0 &&
+                 (packet_data[PACKET_SEQNO_INDEX] & 0xff) == ((packets_received - 1) & 0xff))
+              {
+                Send_Byte(ctx, ACK);
+                if(packets_received == 1) Send_Byte(ctx, CRC16);
+              }
+              else if((packet_data[PACKET_SEQNO_INDEX] & 0xff) != (packets_received & 0xff))
               {
                 Send_Byte(ctx, NACK); //local data sequence number is different to rx data packet.
               }
@@ -144,35 +183,48 @@ int32_t Ymodem_receive(dev_ctx_t *ctx, uint8_t *buf, uint32_t appaddr)
                   if(packet_data[PACKET_HEADER] != 0)
                   {
                     /* Filename packet has valid data */
-                    for(i = 0, file_ptr = packet_data + PACKET_HEADER; (*file_ptr != 0) && (i < FILE_NAME_LENGTH);)
+                    uint8_t *packet_end = packet_data + PACKET_HEADER + packet_length;
+                    for(i = 0, file_ptr = packet_data + PACKET_HEADER; (file_ptr < packet_end) && (*file_ptr != 0) && (i < FILE_NAME_LENGTH - 1);)
                     {
                       file_name[i++] = *file_ptr++;
                     }
-                    file_name[i++] = '\0';
-                    for(i = 0, file_ptr++; (*file_ptr != ' ') && (i < FILE_SIZE_LENGTH);)
+                    file_name[i] = '\0';
+                    while((file_ptr < packet_end) && (*file_ptr != 0)) file_ptr++;
+                    if(file_ptr >= packet_end)
+                    {
+                      Send_Byte(ctx, CA);
+                      Send_Byte(ctx, CA);
+                      return -1;
+                    }
+                    for(i = 0, file_ptr++; (file_ptr < packet_end) && (*file_ptr != 0) && (*file_ptr != ' ') && (i < FILE_SIZE_LENGTH - 1);)
                     {
                       file_size[i++] = *file_ptr++;
                     }
-                    file_size[i++] = '\0';
+                    file_size[i] = '\0';
 
-                    size = atoi(file_size);
-
-                    bytes_left = (uint32_t)size;
-                    encrypted_mode = 0;
+                    char *size_end;
+                    unsigned long parsed_size = strtoul(file_size, &size_end, 10);
 
                     /* Test the size of the image to be sent */
                     /* Image size is greater than Flash size */
-                    if(size > (int32_t)USER_FLASH_SIZE)
+                    if(file_ptr >= packet_end || (*file_ptr != 0 && *file_ptr != ' ') ||
+                       *size_end != '\0' || parsed_size == 0 || parsed_size > USER_FLASH_SIZE)
                     {
                       /* End session */
                       Send_Byte(ctx, CA);
                       Send_Byte(ctx, CA);
                       return -1;
                     }
+                    size = (int32_t)parsed_size;
+                    bytes_left = (uint32_t)size;
+                    encrypted_mode = 0;
                     /* erase user application area */
                     if(flash_erase_application((uint32_t)size) != HAL_OK)
                     {
                       ctx->printf("Error flash erasing, check core's power supply\r\n");
+                      Send_Byte(ctx, CA);
+                      Send_Byte(ctx, CA);
+                      return -2;
                     }
                     Send_Byte(ctx, ACK);
                     Send_Byte(ctx, CRC16);
@@ -225,9 +277,11 @@ int32_t Ymodem_receive(dev_ctx_t *ctx, uint8_t *buf, uint32_t appaddr)
                   }
 
                   ramsource = (uint32_t)buf_ptr;
+                  uint32_t words = (n + 3U) / 4U;
+                  memset(buf_ptr + n, 0xFF, words * 4U - n);
 
                   /* Write received data in Flash */
-                  if(flash_write(&flashdestination, (uint32_t*)ramsource, (uint16_t)n / 4) == 0)
+                  if(flash_write(&flashdestination, (uint32_t*)ramsource, words) == 0)
                   {
                     flashdestination += n;
                     Send_Byte(ctx, ACK);
@@ -249,6 +303,16 @@ int32_t Ymodem_receive(dev_ctx_t *ctx, uint8_t *buf, uint32_t appaddr)
           Send_Byte(ctx, CA);
           Send_Byte(ctx, CA);
           return -3;
+        case -2:
+          errors++;
+          if(errors > MAX_ERRORS)
+          {
+            Send_Byte(ctx, CA);
+            Send_Byte(ctx, CA);
+            return 0;
+          }
+          Send_Byte(ctx, NACK);
+          break;
         default:
           if(session_begin > 0)
           {
@@ -260,7 +324,8 @@ int32_t Ymodem_receive(dev_ctx_t *ctx, uint8_t *buf, uint32_t appaddr)
             Send_Byte(ctx, CA);
             return 0;
           }
-          Send_Byte(ctx, CRC16);
+          if(session_begin > 0) Send_Byte(ctx, NACK);
+          else Send_Byte(ctx, CRC16);
           break;
       }
       if(file_done != 0)

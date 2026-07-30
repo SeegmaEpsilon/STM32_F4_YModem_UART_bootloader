@@ -46,7 +46,7 @@ int32_t download_to_flash(dev_ctx_t *ctx)
   }
   else if(Size == -2)
   {
-    ctx->printf("Verification failed!\r\n");
+    ctx->printf("Flash erase or write failed!\r\n");
   }
   else if(Size == -3)
   {

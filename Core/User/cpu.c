@@ -15,10 +15,8 @@
 #define BOOTLOADER_INTERFACE_NAME "UART"
 #endif
 
-#define BOOTLOADER_VERSION "1.3.0-beta.1"
 #define APP_RAM_START      0x20000000UL
 #define APP_RAM_END        0x20020000UL
-#define BOOTLOADER_BOX     "============================="
 
 static void hal_deinit_all(void)
 {
@@ -62,26 +60,10 @@ static void print_app_status(dev_ctx_t *ctx)
   else ctx->printf("Application is invalid\r\n");
 }
 
-static void print_info(dev_ctx_t *ctx)
-{
-  uint32_t *uid = (uint32_t*)UID_BASE;
-
-  ctx->printf("Bootloader: %s\r\n", BOOTLOADER_VERSION);
-  ctx->printf("Interface: %s\r\n", BOOTLOADER_INTERFACE_NAME);
-  ctx->printf("App: 0x%08lX-0x%08lX\r\n", APPLICATION_ADDRESS, USER_FLASH_END_ADDRESS);
-  ctx->printf("App size: %lu bytes\r\n", USER_FLASH_SIZE);
-  ctx->printf("App MSP: 0x%08lX\r\n", *(uint32_t*)APPLICATION_ADDRESS);
-  ctx->printf("App reset: 0x%08lX\r\n", *(uint32_t*)(APPLICATION_ADDRESS + sizeof(uint32_t)));
-  ctx->printf("Reset flags: 0x%08lX\r\n", RCC->CSR);
-  ctx->printf("MCU flash: %u KB\r\n", *(uint16_t*)FLASHSIZE_BASE);
-  ctx->printf("UID: %08lX%08lX%08lX\r\n", uid[0], uid[1], uid[2]);
-  print_app_status(ctx);
-}
-
 static void print_menu(dev_ctx_t *ctx)
 {
   ctx->printf("Press '1' to download image to the Internal Flash...\r\n");
-  ctx->printf("Commands: v-verify, g-go, e-erase, i-info, r-reset\r\n");
+  ctx->printf("Commands: v-verify, g-go, e-erase app, r-reset\r\n");
 }
 
 static void drop_rx_line(dev_ctx_t *ctx)
@@ -119,15 +101,16 @@ void cpu(dev_ctx_t *ctx)
 
   const uint32_t timeout_ms = 2000;
 #ifdef USE_INTERFACE_USB
-  while(hUsbDeviceHS.dev_state == USBD_STATE_CONFIGURED) {};
+  uint32_t start = HAL_GetTick();
+  while(hUsbDeviceHS.dev_state != USBD_STATE_CONFIGURED && HAL_GetTick() - start < timeout_ms) {};
 #endif
 
   // Show Program Information
   ctx->printf("\r\n\r\n");
-  ctx->printf(BOOTLOADER_BOX "\r\n");
-  ctx->printf("= %-25s =\r\n", "BOOTLOADER");
-  ctx->printf("= %-25s =\r\n", "VERSION: " BOOTLOADER_VERSION);
-  ctx->printf(BOOTLOADER_BOX "\r\n");
+  ctx->printf("=========================\r\n");
+  ctx->printf("=     F4  BOOTLOADER    =\r\n");
+  ctx->printf("=     VERSION: 1.3.0    =\r\n");
+  ctx->printf("=========================\r\n");
   ctx->printf("\r\n\r\n");
 
   if(!app_is_valid())
@@ -210,10 +193,6 @@ void cpu(dev_ctx_t *ctx)
         {
           ctx->printf("Erase canceled\r\n");
         }
-        break;
-
-      case 'i':
-        print_info(ctx);
         break;
 
       case 'r':
