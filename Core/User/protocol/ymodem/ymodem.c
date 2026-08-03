@@ -219,7 +219,7 @@ int32_t Ymodem_receive(dev_ctx_t *ctx, uint8_t *buf, uint32_t appaddr)
                     bytes_left = (uint32_t)size;
                     encrypted_mode = 0;
                     /* erase user application area */
-                    if(flash_erase_application((uint32_t)size) != HAL_OK)
+                    if(flash_erase_area(appaddr, (uint32_t)size) != HAL_OK)
                     {
                       ctx->printf("Error flash erasing, check core's power supply\r\n");
                       Send_Byte(ctx, CA);

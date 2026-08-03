@@ -63,7 +63,7 @@ static void print_app_status(dev_ctx_t *ctx)
 static void print_menu(dev_ctx_t *ctx)
 {
   ctx->printf("Press '1' to download image to the Internal Flash...\r\n");
-  ctx->printf("Commands: v-verify, g-go, e-erase app, r-reset\r\n");
+  ctx->printf("Commands: v-verify, g-go, e-erase, r-reset\r\n");
 }
 
 static void drop_rx_line(dev_ctx_t *ctx)
@@ -109,7 +109,7 @@ void cpu(dev_ctx_t *ctx)
   ctx->printf("\r\n\r\n");
   ctx->printf("=========================\r\n");
   ctx->printf("=     F4  BOOTLOADER    =\r\n");
-  ctx->printf("=     VERSION: 1.3.0    =\r\n");
+  ctx->printf("=     VERSION: 1.3.1    =\r\n");
   ctx->printf("=========================\r\n");
   ctx->printf("\r\n\r\n");
 
@@ -180,20 +180,53 @@ void cpu(dev_ctx_t *ctx)
         break;
 
       case 'e':
-        ctx->printf("Erase application? y/n\r\n");
+      {
+        uint32_t eraseAddress = 0;
+        uint32_t eraseSize = 0;
+
+        ctx->printf("Erase: a-application, c-config, f-full\r\n");
         cmd = 0;
-        if(ctx->data_get(ctx->handle, &cmd, 1, timeout_ms) == 0 && cmd == 'y')
+        if(ctx->data_get(ctx->handle, &cmd, 1, timeout_ms) != 0)
         {
-          ctx->printf("Start flash erasing, please wait...\r\n");
-          if(flash_erase_application(USER_FLASH_SIZE) == HAL_OK) ctx->printf("Flash erased successfully\r\n");
-          else ctx->printf("Flash erase failed\r\n");
-          NVIC_SystemReset();
+          ctx->printf("Erase canceled\r\n");
+          break;
+        }
+
+        if(cmd == 'a')
+        {
+          eraseAddress = APPLICATION_ADDRESS;
+          eraseSize = USER_FLASH_SIZE;
+        }
+        else if(cmd == 'c')
+        {
+          eraseAddress = DEVICE_CONFIG_ADDRESS;
+          eraseSize = DEVICE_CONFIG_SIZE;
+        }
+        else if(cmd == 'f')
+        {
+          eraseAddress = APPLICATION_ADDRESS;
+          eraseSize = DEVICE_CONFIG_ADDRESS + DEVICE_CONFIG_SIZE - APPLICATION_ADDRESS;
         }
         else
         {
           ctx->printf("Erase canceled\r\n");
+          break;
         }
+
+        ctx->printf("Confirm erase? y/n\r\n");
+        cmd = 0;
+        if(ctx->data_get(ctx->handle, &cmd, 1, timeout_ms) != 0 || cmd != 'y')
+        {
+          ctx->printf("Erase canceled\r\n");
+          break;
+        }
+
+        ctx->printf("Start flash erasing, please wait...\r\n");
+        if(flash_erase_area(eraseAddress, eraseSize) == HAL_OK) ctx->printf("Flash erased successfully\r\n");
+        else ctx->printf("Flash erase failed\r\n");
+        NVIC_SystemReset();
         break;
+      }
 
       case 'r':
         ctx->printf("System reset...\r\n");

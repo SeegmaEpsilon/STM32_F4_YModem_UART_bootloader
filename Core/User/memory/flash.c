@@ -60,15 +60,16 @@ int32_t download_to_flash(dev_ctx_t *ctx)
   return Size;
 }
 
-HAL_StatusTypeDef flash_erase_application(uint32_t size)
+HAL_StatusTypeDef flash_erase_area(uint32_t address, uint32_t size)
 {
-  if(size == 0 || size > USER_FLASH_SIZE)
+  uint32_t endAddress = address + size;
+  if(size == 0 || endAddress <= address || address < APPLICATION_ADDRESS || endAddress > DEVICE_CONFIG_ADDRESS + DEVICE_CONFIG_SIZE)
   {
     return HAL_ERROR;
   }
 
-  uint32_t startSector = flash_get_sector(APPLICATION_ADDRESS);
-  uint32_t endSector = flash_get_sector(APPLICATION_ADDRESS + size - 1);
+  uint32_t startSector = flash_get_sector(address);
+  uint32_t endSector = flash_get_sector(endAddress - 1);
 
   __disable_irq();
   HAL_FLASH_Unlock();
