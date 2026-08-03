@@ -80,6 +80,7 @@ HAL_StatusTypeDef flash_erase_area(uint32_t address, uint32_t size)
   uint32_t pageError;
 
   EraseInitStruct.TypeErase = FLASH_TYPEERASE_SECTORS;
+  EraseInitStruct.VoltageRange = FLASH_VOLTAGE_RANGE_3;
   EraseInitStruct.Banks = FLASH_BANK_1;
   EraseInitStruct.NbSectors = endSector - startSector + 1;
   EraseInitStruct.Sector = startSector;

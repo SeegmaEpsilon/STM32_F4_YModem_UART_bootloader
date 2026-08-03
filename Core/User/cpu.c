@@ -109,7 +109,7 @@ void cpu(dev_ctx_t *ctx)
   ctx->printf("\r\n\r\n");
   ctx->printf("=========================\r\n");
   ctx->printf("=     F4  BOOTLOADER    =\r\n");
-  ctx->printf("=     VERSION: 1.3.1    =\r\n");
+  ctx->printf("=     VERSION: 1.3.2    =\r\n");
   ctx->printf("=========================\r\n");
   ctx->printf("\r\n\r\n");
 
@@ -128,8 +128,6 @@ void cpu(dev_ctx_t *ctx)
   while(1)
   {
     cmd = 0;
-
-    ctx->printf(".");
 
     if(ctx->data_get(ctx->handle, &cmd, 1, timeout_ms) != 0)
     {
